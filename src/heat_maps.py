@@ -25,7 +25,6 @@ def access_api(
         California)
         county: County name with the first letter capitalized (i.e. Maricopa).
         Default is to return all counties.
-        columns: List of the columns from which to create a heatmap.
         token: a socrata token for accessing the API. This is not require, but
         will result in faster responses if provided.
 
