@@ -1,0 +1,5 @@
+addfips==0.3.1
+contextily==1.2.0
+geopandas==0.10.2
+matplotlib==3.5.1
+sodapy==2.1.0

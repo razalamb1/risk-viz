@@ -2,7 +2,6 @@
 
 from src.heat_maps import access_api
 from dotenv import load_dotenv
-import googlemaps
 import os
 
 load_dotenv()
