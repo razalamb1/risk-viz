@@ -1,6 +1,6 @@
 """Create heatmaps from CDC PLACES data."""
+from inspect import BoundArguments
 from sodapy import Socrata
-import os
 import geopandas as gpd
 import addfips
 import contextily as cx
@@ -11,6 +11,7 @@ def access_api(
     columns: list[str],
     state: str,
     county: str = "all",
+    tract: bool = True,
     token: str = None,
 ) -> dict:
     """Fetch CDC PLACES data.
@@ -25,6 +26,7 @@ def access_api(
         California)
         county: County name with the first letter capitalized (i.e. Maricopa).
         Default is to return all counties.
+        tract: A boolean indicator for whether or not to use tract-level data.
         token: a socrata token for accessing the API. This is not require, but
         will result in faster responses if provided.
 
@@ -41,16 +43,28 @@ def access_api(
     client = Socrata(socrata_domain, token)
     c = columns
     selects = "statedesc, countyname, geolocation, tractfips, " + ", ".join(c)
-    if county != "all":
-        results = client.get(
-            socrata_dataset_identifier,
-            where=f"statedesc = '{state}' and countyname = '{county}'",
-            select=selects,
-            content_type="geoJSON",
-            limit=3000,
-        )
-        return results
+    if tract:
+        if county != "all":
+            results = client.get(
+                socrata_dataset_identifier,
+                where=f"statedesc = '{state}' and countyname = '{county}'",
+                select=selects,
+                content_type="geoJSON",
+                limit=3000,
+            )
+            return results
+        else:
+            results = client.get(
+                socrata_dataset_identifier,
+                where=(f"statedesc = '{state}'"),
+                select=selects,
+                content_type="geoJSON",
+                limit=10000,
+            )
+            return results
     else:
+        selects = "statedesc, countyname, geolocation, countyfips, " + ", ".join(c)
+        socrata_dataset_identifier = "i46a-9kgh"
         results = client.get(
             socrata_dataset_identifier,
             where=(f"statedesc = '{state}'"),
@@ -73,7 +87,10 @@ def convert_data(geoJSON: dict) -> gpd.GeoDataFrame:
 
 
 def merge_data(
-    data: gpd.GeoDataFrame, state: str, county: str = "all"
+    data: gpd.GeoDataFrame,
+    state: str,
+    county: str = "all",
+    tract: bool = True,
 ) -> gpd.GeoDataFrame:
     """Merge Census tract data with data from API call.
 
@@ -82,30 +99,40 @@ def merge_data(
         state: The state from which the data belongs to.
         county: The county from which the data belongs to, defaults to all
         counties within the state.
+        tract: A boolean indicator for whether or not to use tract-level data.
     Returns:
         GeoDataFrame.
     """
-    af = addfips.AddFIPS()
-    fips = af.get_state_fips(state)
-    boundaries = gpd.read_file(f"data/{fips}.geojson")
-    if county == "all":
-        temp = boundaries.merge(
-            data,
-            how="left",
-            left_on="GEOID",
-            right_on="tractfips",
-        )
+    if tract:
+        af = addfips.AddFIPS()
+        fips = af.get_state_fips(state)
+        boundaries = gpd.read_file(f"data/{fips}.geojson")
+        if county == "all":
+            temp = boundaries.merge(
+                data,
+                how="left",
+                left_on="GEOID",
+                right_on="tractfips",
+            )
+        else:
+            county_fips = af.get_county_fips(county, state=state)[2:]
+            boundaries = boundaries[boundaries["COUNTYFP"] == county_fips]
+            temp = boundaries.merge(
+                data,
+                how="left",
+                left_on="GEOID",
+                right_on="tractfips",
+            )
+        output = gpd.GeoDataFrame(temp, geometry="geometry_x")
+        return output
     else:
-        county_fips = af.get_county_fips(county, state=state)[2:]
-        boundaries = boundaries[boundaries["COUNTYFP"] == county_fips]
+        boundaries = gpd.read_file("data/cb_2018_us_county_20m")
+        boundaries["totalfips"] = boundaries["STATEFP"] + boundaries["COUNTYFP"]
         temp = boundaries.merge(
-            data,
-            how="left",
-            left_on="GEOID",
-            right_on="tractfips",
+            data, how="right", left_on="totalfips", right_on="countyfips"
         )
-    output = gpd.GeoDataFrame(temp, geometry="geometry_x")
-    return output
+        output = gpd.GeoDataFrame(temp, geometry="geometry_x")
+        return output
 
 
 def heat_map(
@@ -141,7 +168,7 @@ def heat_map(
         },
         alpha=0.8,
         edgecolor="#808080",
-        linewidth=0.3,
+        linewidth=0.6,
     )
     cx.add_basemap(ax)
     ax.set_axis_off()
@@ -163,6 +190,7 @@ def full_process(
     county: str = "all",
     cmaps=None,
     token: str = None,
+    tract: bool = True,
 ) -> None:
     """Extract, process, and graph CDC PLACES data.
 
@@ -186,9 +214,9 @@ def full_process(
         Nothing. Image file is saved in image folder under format
         {state}_{county}_{name}.img.
     """
-    data = access_api(columns, state, county, token)
+    data = access_api(columns, state, county, tract, token)
     gdf = convert_data(data)
-    merged_gdf = merge_data(gdf, state, county)
+    merged_gdf = merge_data(gdf, state, county, tract)
     merged_gdf = merged_gdf.to_crs(epsg=3857)
     for risk in range(len(columns)):
         merged_gdf[columns[risk]] = merged_gdf[columns[risk]].astype(float)
@@ -208,6 +236,6 @@ def full_process(
         fig.figure.savefig(
             f"images/{state}_{county}_{names[risk]}.png",
             bbox_inches="tight",
-            dpi=360,
+            dpi=250,
         )
     pass

@@ -1,6 +1,12 @@
 # User Added
 *.geojson
 .DS_Store
+*.cpg
+*.dbf
+*.prj
+*.shp
+*.xml
+*.shx
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
