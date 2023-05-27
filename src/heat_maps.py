@@ -42,7 +42,10 @@ def access_api(
     # be rate limited
     client = Socrata(socrata_domain, token)
     c = columns
-    selects = "statedesc, countyname, geolocation, tractfips, " + ", ".join(c)
+    selects = (
+        "statedesc, countyname, geolocation, tractfips, totalpopulation, "
+        + ", ".join(c)
+    )
     if tract:
         if county != "all":
             results = client.get(
@@ -63,7 +66,10 @@ def access_api(
             )
             return results
     else:
-        selects = "statedesc, countyname, geolocation, countyfips, " + ", ".join(c)
+        selects = (
+            "statedesc, countyname, geolocation, totalpopulation, countyfips, "
+            + ", ".join(c)
+        )
         socrata_dataset_identifier = "i46a-9kgh"
         results = client.get(
             socrata_dataset_identifier,
@@ -161,7 +167,11 @@ def heat_map(
         column=column,
         cmap=colormap,
         legend=True,
-        legend_kwds={"shrink": 0.5, "label": "Percent of 18+ Population"},
+        legend_kwds={
+            "shrink": 0.5,
+            "label": "Percent of 18+ Population",
+            "format": "%.0f%%",
+        },
         missing_kwds={
             "color": "grey",
             "label": "Missing values",
@@ -170,7 +180,7 @@ def heat_map(
         edgecolor="#808080",
         linewidth=0.6,
     )
-    cx.add_basemap(ax)
+    # cx.add_basemap(ax)
     ax.set_axis_off()
     if county == "all":
         ax.set_title(f"{name} in {state}", fontsize=20, **csfont)
